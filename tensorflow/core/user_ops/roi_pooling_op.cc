@@ -1,4 +1,5 @@
 #include "tensorflow/core/user_ops/roi_pooling_op.h"
+#include "tensorflow/core/platform/logging.h"
 
 REGISTER_OP("RoiPooling")
     .Input("feature_maps: float32")
@@ -43,7 +44,6 @@ void RoiPoolingOp::Compute(OpKernelContext* context) {
     float* features = (float*) feature_tensor.tensor_data().data();
     float* rois = (float*) roi_tensor.tensor_data().data();
 
-
     TensorShape result_shape = {num_batches, num_rois, output_h, output_w, num_channels};
     Tensor* output_tensor;
     OP_REQUIRES_OK(context, context->allocate_output(0, result_shape, &output_tensor));
@@ -57,6 +57,9 @@ void RoiPoolingOp::Compute(OpKernelContext* context) {
         for(int channel_i = 0; channel_i < num_channels; channel_i++) {
             for(int roi_i = 0; roi_i < num_rois; roi_i++) {
 				int roi_start = roi_batch_start + (roi_i * 4);
+
+                int roi_start_y = feature_h * rois[roi_start+0];
+                int roi_start_x = feature_w * rois[roi_start+1];
 				int roi_h = rois[roi_start+2];
 				int roi_w = rois[roi_start+3];
 
@@ -65,23 +68,26 @@ void RoiPoolingOp::Compute(OpKernelContext* context) {
                 int kernel_w = roi_w / output_w;
 
 				for(int output_x = 0; output_x < output_w; output_x++) {
-					for(int output_y = 0; output_y < output_y; output_y++) {
+					for(int output_y = 0; output_y < output_h; output_y++) {
 						float max_value = -1;
 
 						for(int x = 0; x < kernel_w; x++) {
 							for(int y = 0; y < kernel_h; y++) {
-								int i = feature_batch_start +
-											((y + (output_h * output_y)) * feature_w * num_channels) +
-											((x + (output_w * output_x)) * num_channels) +
-											channel_i;
-								max_value = features[i] > max_value ? features[i] : max_value;
+                                int roi_x = roi_start_x + (output_x * kernel_w + x);
+                                int roi_y = roi_start_y + (output_y * kernel_h + y);
+                                int index = feature_batch_start +
+                                            (roi_y * feature_w * num_channels) +
+                                            (roi_x * num_channels) + channel_i;
+
+								max_value = features[index] > max_value ? features[index] : max_value;
 							}
 						}
 
-						output[img_i * num_rois * output_h * output_w * num_channels +
+						int output_index = img_i * num_rois * output_h * output_w * num_channels +
 								roi_i * output_w * output_h * num_channels +
 								output_y * output_w * num_channels + 
-								output_x * num_channels + channel_i] = max_value;
+								output_x * num_channels + channel_i;
+                        output[output_index] = max_value;
 					}
 				}
 			}
