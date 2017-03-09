@@ -15,7 +15,7 @@ REGISTER_OP("RoiPooling")
 
         // assign shape to output tensor
         ShapeHandle output_shape;
-        TF_RETURN_IF_ERROR(c->MakeShapeFromShapeTensor(2, &output_shape));
+        TF_RETURN_IF_ERROR(c->MakeShapeFromShapeTensor(2, &output_shape)); // fixing shape here!!!
         c->set_output(0, output_shape);
 
         return Status::OK();
@@ -82,7 +82,8 @@ void RoiPoolingOp::Compute(OpKernelContext* context) {
 							}
 						}
 
-						output[img_i * output_h * output_w * num_channels +
+						output[img_i * num_rois * output_h * output_w * num_channels +
+								roi_i * output_w * output_h * num_channels +
 								output_y * output_w * num_channels + 
 								output_x * num_channels + channel_i] = max_value;
 					}
