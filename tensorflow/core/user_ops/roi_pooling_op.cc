@@ -51,18 +51,14 @@ void RoiPoolingOp::Compute(OpKernelContext* context) {
 	float* output = (float*) output_tensor->tensor_data().data();
 
     for(int img_i = 0; img_i < num_batches; img_i++) {
-		float* feature_batch_start = features + (img_i * feature_h * feature_w * num_channels);
-		float* roi_batch_start = rois + (img_i * num_rois * 4);
+		int feature_batch_start = img_i * feature_h * feature_w * num_channels;
+		int roi_batch_start = img_i * num_rois * 4;
 
         for(int channel_i = 0; channel_i < num_channels; channel_i++) {
             for(int roi_i = 0; roi_i < num_rois; roi_i++) {
-				float* roi_start = roi_batch_start + (roi_i * 4);
-
-                // calculate starting pixel of roi
-                int roi_y = feature_h * *(roi_start+0);
-                int roi_x = feature_w * *(roi_start+1);
-				int roi_h = *(roi_start+2);
-				int roi_w = *(roi_start+3);
+				int roi_start = roi_batch_start + (roi_i * 4);
+				int roi_h = rois[roi_start+2];
+				int roi_w = rois[roi_start+3];
 
                 // calculate kernel size
                 int kernel_h = roi_h / output_h;
@@ -74,11 +70,11 @@ void RoiPoolingOp::Compute(OpKernelContext* context) {
 
 						for(int x = 0; x < kernel_w; x++) {
 							for(int y = 0; y < kernel_h; y++) {
-								float* i = feature_batch_start +
-											(y * feature_w * num_channels) +
-											(x * num_channels) +
+								int i = feature_batch_start +
+											((y + (output_h * output_y)) * feature_w * num_channels) +
+											((x + (output_w * output_x)) * num_channels) +
 											channel_i;
-								max_value = *(i) > max_value ? *(i) : max_value;
+								max_value = features[i] > max_value ? features[i] : max_value;
 							}
 						}
 
