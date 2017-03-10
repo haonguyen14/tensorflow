@@ -6,21 +6,7 @@ REGISTER_OP("RoiPooling")
     .Input("rois: float32")
     .Input("output_shape: int32")
     .Output("pooled_features: float32")
-    .SetShapeFn([](InferenceContext* c) {
-
-        // check inputs' rank
-        ShapeHandle feature_maps_shape;
-        ShapeHandle rois_shape;
-        TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 4, &feature_maps_shape)); // [batch, h, w, c]
-        TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 3, &rois_shape)); // [batch, roi, windows]
-
-        // assign shape to output tensor
-        ShapeHandle output_shape;
-        TF_RETURN_IF_ERROR(c->MakeShapeFromShapeTensor(2, &output_shape)); // fixing shape here!!!
-        c->set_output(0, output_shape);
-
-        return Status::OK();
-    });
+    .Output("argmax: int32");
 
 void RoiPoolingOp::Compute(OpKernelContext* context) {
     const Tensor& feature_tensor = context->input(0);
@@ -44,11 +30,14 @@ void RoiPoolingOp::Compute(OpKernelContext* context) {
     float* features = (float*) feature_tensor.tensor_data().data();
     float* rois = (float*) roi_tensor.tensor_data().data();
 
-    TensorShape result_shape = {num_batches, num_rois, output_h, output_w, num_channels};
     Tensor* output_tensor;
+    Tensor* argmax_tensor;
+    TensorShape result_shape = {num_batches, num_rois, output_h, output_w, num_channels};
     OP_REQUIRES_OK(context, context->allocate_output(0, result_shape, &output_tensor));
+    OP_REQUIRES_OK(context, context->allocate_output(1, result_shape, &argmax_tensor));
 
 	float* output = (float*) output_tensor->tensor_data().data();
+    int* argmax = (int*) argmax_tensor->tensor_data().data();
 
     for(int img_i = 0; img_i < num_batches; img_i++) {
 		int feature_batch_start = img_i * feature_h * feature_w * num_channels;
@@ -70,6 +59,7 @@ void RoiPoolingOp::Compute(OpKernelContext* context) {
 				for(int output_x = 0; output_x < output_w; output_x++) {
 					for(int output_y = 0; output_y < output_h; output_y++) {
 						float max_value = -1;
+                        int max_index = -1;
 
 						for(int x = 0; x < kernel_w; x++) {
 							for(int y = 0; y < kernel_h; y++) {
@@ -79,7 +69,10 @@ void RoiPoolingOp::Compute(OpKernelContext* context) {
                                             (roi_y * feature_w * num_channels) +
                                             (roi_x * num_channels) + channel_i;
 
-								max_value = features[index] > max_value ? features[index] : max_value;
+                                if(features[index] > max_value) {
+                                    max_value = features[index];
+                                    max_index = index;
+                                }
 							}
 						}
 
@@ -87,7 +80,9 @@ void RoiPoolingOp::Compute(OpKernelContext* context) {
 								roi_i * output_w * output_h * num_channels +
 								output_y * output_w * num_channels + 
 								output_x * num_channels + channel_i;
+
                         output[output_index] = max_value;
+                        argmax[output_index] = max_index;
 					}
 				}
 			}
