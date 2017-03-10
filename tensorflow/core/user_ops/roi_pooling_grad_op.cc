@@ -1,7 +1,7 @@
 #include "tensorflow/core/user_ops/roi_pooling_grad_op.h"
 
-REGISTER_OP("RoiPoolingGradOp")
-    .Input("input_shape: list(int32) = 4")
+REGISTER_OP("RoiPoolingGrad")
+    .Input("input_shape: int32")
     .Input("gradients: float32")
     .Input("argmax: int32")
     .Output("output: float32");
@@ -32,15 +32,14 @@ void RoiPoolingGradOp::Compute(OpKernelContext* context) {
             context->allocate_output(0, output_shape, &output_tensor));
 
     float* output = (float*) output_tensor->tensor_data().data();
+	int output_size = num_batches * feature_height * feature_width * num_channels;
+	for(int i = 0; i < output_size; i++) output[i] = 0.0;
 
-    for(int batch = 0; batch < num_batches; batch++) {
-        int feature_batch_start = batch * feature_height * feature_width * num_channels;
-
-        for(int channel = 0; channel < num_channels; channel++) {
-             
-        }
+	int argmax_size = num_batches * num_rois * argmax_height * argmax_width * num_channels; 
+    for(int i = 0; i < argmax_size; i++) {
+		output[argmax[i]] += gradients[i];
     }
 }
 
-REGISTER_KERNEL_BUILDER(Name("RoiPoolingGradOp")
+REGISTER_KERNEL_BUILDER(Name("RoiPoolingGrad")
         .Device(DEVICE_CPU), RoiPoolingGradOp);
